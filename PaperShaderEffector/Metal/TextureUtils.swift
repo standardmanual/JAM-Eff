@@ -81,8 +81,29 @@ enum TextureUtils {
         return UIImage(cgImage: cgImage)
     }
 
+    /// 사진을 캔버스 비율에 맞게 letterbox/pillarbox 합성 (contain 모드)
+    static func fitImage(_ image: UIImage, canvasSize: CGSize) -> UIImage {
+        let photoSize = image.size
+        guard photoSize.width > 0, photoSize.height > 0 else { return image }
+        let scaleX = canvasSize.width  / photoSize.width
+        let scaleY = canvasSize.height / photoSize.height
+        let scale  = min(scaleX, scaleY)
+        let fittedW = photoSize.width  * scale
+        let fittedH = photoSize.height * scale
+        let offsetX = (canvasSize.width  - fittedW) / 2
+        let offsetY = (canvasSize.height - fittedH) / 2
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: canvasSize, format: format).image { ctx in
+            UIColor.black.setFill()
+            ctx.fill(CGRect(origin: .zero, size: canvasSize))
+            image.draw(in: CGRect(x: offsetX, y: offsetY, width: fittedW, height: fittedH))
+        }
+    }
+
     /// 빈 렌더 타깃 텍스처 생성 (BGRA8Unorm)
-    static func makeRenderTarget(width: Int, height: Int, device: MTLDevice) -> MTLTexture? {
+    nonisolated static func makeRenderTarget(width: Int, height: Int, device: MTLDevice) -> MTLTexture? {
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: .bgra8Unorm,
             width: width,

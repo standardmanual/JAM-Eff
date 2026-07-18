@@ -267,9 +267,6 @@ struct ShaderThumbnailView: View {
             p.addLine(to: CGPoint(x: cx - r * 0.75, y: cy))
             p.closeSubpath()
             ctx.stroke(p, with: .color(.white.opacity(0.65)), lineWidth: 2)
-
-        default:
-            break
         }
     }
 
