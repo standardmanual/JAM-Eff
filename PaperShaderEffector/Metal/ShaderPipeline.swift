@@ -293,12 +293,14 @@ struct TransformUniforms {
 // 32 bytes: 8 × float
 
 struct OverlayUniforms {
-    var scale:    Float       // 오버레이 크기 배율 (0.5 = 캔버스 절반 크기)
-    var rotation: Float       // 오버레이 회전 (라디안)
-    var offsetX:  Float       // 오버레이 위치 X (UV 단위, 0=중앙)
-    var offsetY:  Float       // 오버레이 위치 Y (UV 단위, 0=중앙)
-    var opacity:  Float
-    var _pad1: Float = 0; var _pad2: Float = 0; var _pad3: Float = 0
+    var scale:        Float    // 오버레이 크기 배율 (1.0 = 캔버스 꽉 채움)
+    var rotation:     Float    // 오버레이 회전 (라디안)
+    var offsetX:      Float    // 오버레이 위치 X (UV 단위, 0=중앙)
+    var offsetY:      Float    // 오버레이 위치 Y (UV 단위, 0=중앙)
+    var opacity:      Float
+    var canvasAspect: Float    // canvasWidth / canvasHeight (e.g. 0.5625 for 9:16)
+    var _pad0: Float = 0
+    var _pad1: Float = 0
 }
 
 // MARK: - Vertex Data

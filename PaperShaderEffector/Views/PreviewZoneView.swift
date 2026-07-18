@@ -43,45 +43,80 @@ struct MetalPreviewView: UIViewRepresentable {
 }
 
 // MARK: - GestureOverlayView
+//
+// onChanged로 renderer에 직접 기록 → CADisplayLink가 다음 프레임에서 읽음 (60fps).
+// SwiftUI를 거치지 않으므로 뚝뚝 끊기지 않는다.
 
 struct GestureOverlayView: View {
     let renderer: Renderer
     let viewSize: CGSize
     @EnvironmentObject var session: EditSession
 
-    @GestureState private var magnification: CGFloat = 1.0
-    @GestureState private var rotationAngle: Angle = .zero
-    @GestureState private var dragOffset: CGSize = .zero
+    // 각 제스처가 시작될 때 캡처한 기준값 (제스처 도중 SwiftUI 재렌더 없이 유지)
+    @State private var pinchBaseScale: Float = 1.0
+    @State private var rotBaseAngle: Float   = 0.0
+    @State private var dragBaseX: Float      = 0.0
+    @State private var dragBaseY: Float      = 0.0
+    @State private var isPinching  = false
+    @State private var isRotating  = false
+    @State private var isDragging  = false
 
     private var isTargetingImageLayer: Bool {
         session.selectedLayer?.isImageLayer == true
     }
 
     var body: some View {
+        // 핀치 → 균일 스케일 (aspect ratio 유지)
         let magnifyGesture = MagnificationGesture()
-            .updating($magnification) { value, state, _ in state = value }
-            .onEnded { value in
+            .onChanged { value in
                 guard isTargetingImageLayer else { return }
-                renderer.selectedLayerTransform.scale = max(0.05, renderer.selectedLayerTransform.scale * Float(value))
+                if !isPinching {
+                    isPinching = true
+                    pinchBaseScale = renderer.selectedLayerTransform.scale
+                }
+                renderer.selectedLayerTransform.scale = max(0.05, pinchBaseScale * Float(value))
+            }
+            .onEnded { value in
+                defer { isPinching = false }
+                guard isTargetingImageLayer else { return }
+                renderer.selectedLayerTransform.scale = max(0.05, pinchBaseScale * Float(value))
                 syncTransformToSession()
             }
 
+        // 두 손가락 회전
         let rotateGesture = RotationGesture()
-            .updating($rotationAngle) { value, state, _ in state = value }
-            .onEnded { value in
+            .onChanged { value in
                 guard isTargetingImageLayer else { return }
-                renderer.selectedLayerTransform.rotation += Float(value.radians)
+                if !isRotating {
+                    isRotating = true
+                    rotBaseAngle = renderer.selectedLayerTransform.rotation
+                }
+                renderer.selectedLayerTransform.rotation = rotBaseAngle + Float(value.radians)
+            }
+            .onEnded { value in
+                defer { isRotating = false }
+                guard isTargetingImageLayer else { return }
+                renderer.selectedLayerTransform.rotation = rotBaseAngle + Float(value.radians)
                 syncTransformToSession()
             }
 
-        let dragGesture = DragGesture(minimumDistance: 0)
-            .updating($dragOffset) { value, state, _ in state = value.translation }
-            .onEnded { value in
+        // 드래그 → 오프셋 이동
+        let dragGesture = DragGesture(minimumDistance: 1)
+            .onChanged { value in
                 guard isTargetingImageLayer else { return }
-                let uvDX = Float(value.translation.width  / viewSize.width)
-                let uvDY = Float(value.translation.height / viewSize.height)
-                renderer.selectedLayerTransform.offsetX += uvDX
-                renderer.selectedLayerTransform.offsetY += uvDY
+                if !isDragging {
+                    isDragging = true
+                    dragBaseX = renderer.selectedLayerTransform.offsetX
+                    dragBaseY = renderer.selectedLayerTransform.offsetY
+                }
+                renderer.selectedLayerTransform.offsetX = dragBaseX + Float(value.translation.width  / viewSize.width)
+                renderer.selectedLayerTransform.offsetY = dragBaseY + Float(value.translation.height / viewSize.height)
+            }
+            .onEnded { value in
+                defer { isDragging = false }
+                guard isTargetingImageLayer else { return }
+                renderer.selectedLayerTransform.offsetX = dragBaseX + Float(value.translation.width  / viewSize.width)
+                renderer.selectedLayerTransform.offsetY = dragBaseY + Float(value.translation.height / viewSize.height)
                 syncTransformToSession()
             }
 

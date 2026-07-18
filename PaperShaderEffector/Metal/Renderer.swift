@@ -105,10 +105,11 @@ final class Renderer: NSObject, MTKViewDelegate {
             case .image(let img):
                 guard let imageTex = cachedImageTexture(for: layer, image: img, ratioKey: ratioKey) else { continue }
                 let transform = (layer.id == selectedLayerID) ? selectedLayerTransform : layer.imageTransform
+                let canvasAspect = Float(canvasPixelSize.width / canvasPixelSize.height)
                 let params = OverlayUniforms(
                     scale: transform.scale, rotation: transform.rotation,
                     offsetX: transform.offsetX, offsetY: transform.offsetY,
-                    opacity: layer.opacity, _pad1: 0, _pad2: 0, _pad3: 0
+                    opacity: layer.opacity, canvasAspect: canvasAspect
                 )
                 ShaderPipeline.shared.encodeOverlay(
                     background: inputTex, overlay: imageTex,
@@ -195,10 +196,11 @@ final class Renderer: NSObject, MTKViewDelegate {
                     continue
                 }
                 let transform = (layer.id == selectedLayerID) ? selectedLayerTransform : layer.imageTransform
+                let canvasAspect = Float(canvasPixelSize.width / canvasPixelSize.height)
                 let params = OverlayUniforms(
                     scale: transform.scale, rotation: transform.rotation,
                     offsetX: transform.offsetX, offsetY: transform.offsetY,
-                    opacity: layer.opacity, _pad1: 0, _pad2: 0, _pad3: 0
+                    opacity: layer.opacity, canvasAspect: canvasAspect
                 )
                 ShaderPipeline.shared.encodeOverlay(
                     background: inputTex, overlay: imageTex,

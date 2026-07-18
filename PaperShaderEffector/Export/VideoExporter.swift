@@ -252,10 +252,11 @@ final class VideoExporter: ObservableObject {
             case .image:
                 guard let imageTex = inputs.imageTextures[layer.id] else { continue }
                 let t = layer.imageTransform
+                let canvasAspect = Float(inputs.width) / Float(inputs.height)
                 let params = OverlayUniforms(
                     scale: t.scale, rotation: t.rotation,
                     offsetX: t.offsetX, offsetY: t.offsetY,
-                    opacity: layer.opacity, _pad1: 0, _pad2: 0, _pad3: 0
+                    opacity: layer.opacity, canvasAspect: canvasAspect
                 )
                 pipeline.encodeOverlay(
                     background: inputTex, overlay: imageTex,
