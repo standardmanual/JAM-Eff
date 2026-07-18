@@ -66,7 +66,6 @@ struct HomeView: View {
 
                     // Skip with default (no photo — start with gradient only)
                     Button {
-                        session.sourcePhoto = nil
                         navigateToEditor = true
                     } label: {
                         Text("사진 없이 시작")
@@ -102,7 +101,7 @@ struct HomeView: View {
 
         if let data = try? await item.loadTransferable(type: Data.self),
            let uiImage = UIImage(data: data) {
-            session.sourcePhoto = SourcePhoto(image: uiImage)
+            session.addImageLayer(uiImage)
             navigateToEditor = true
         }
     }

@@ -580,7 +580,8 @@ final class ShaderPipeline: @unchecked Sendable {
         commandBuffer: MTLCommandBuffer,
         time: Float
     ) {
-        guard let pipelineState = pipelineState(for: layer.effectType) else { return }
+        guard let effect = layer.effectType,
+              let pipelineState = pipelineState(for: effect) else { return }
         guard let vertexBuffer else { return }
 
         let renderPassDescriptor = MTLRenderPassDescriptor()
@@ -657,7 +658,8 @@ final class ShaderPipeline: @unchecked Sendable {
             return val
         }
 
-        switch layer.effectType {
+        guard let effectType = layer.effectType else { return }
+        switch effectType {
         case .meshGradient:
             var u = MeshGradientUniforms(
                 distortion:  floatParam("distortion", default: 0.3),

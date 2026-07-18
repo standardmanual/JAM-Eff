@@ -12,7 +12,7 @@ struct LayerChip: View {
         VStack(spacing: 0) {
             // Thumbnail area (top 4/5 = 64pt)
             ZStack(alignment: .topTrailing) {
-                ShaderThumbnailView(effect: layer.effectType, cornerRadius: 8)
+                thumbnail
                     .frame(height: 64)
 
                 // Enable/disable badge
@@ -23,13 +23,13 @@ struct LayerChip: View {
                         .background(Circle().fill(.ultraThinMaterial).frame(width: 18, height: 18))
                 }
                 .buttonStyle(.plain)
-                .frame(width: 44, height: 44) // expanded touch target
+                .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
                 .offset(x: 4, y: -4)
             }
 
             // Label area (bottom 1/5 = 16pt)
-            Text(layer.effectType.rawValue)
+            Text(chipLabel)
                 .font(.caption)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -45,6 +45,27 @@ struct LayerChip: View {
                 .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
         )
         .onTapGesture(perform: onTap)
+    }
+
+    @ViewBuilder
+    private var thumbnail: some View {
+        if let img = layer.uiImage {
+            Image(uiImage: img)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity, maxHeight: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+        } else if let effect = layer.effectType {
+            ShaderThumbnailView(effect: effect, cornerRadius: 8)
+        } else {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.secondary.opacity(0.3))
+        }
+    }
+
+    private var chipLabel: String {
+        if layer.isImageLayer { return "사진" }
+        return layer.effectType?.rawValue ?? ""
     }
 }
 

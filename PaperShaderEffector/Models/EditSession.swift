@@ -1,27 +1,13 @@
 import Foundation
+import SwiftUI
 import UIKit
 import Metal
 import Combine
-
-// MARK: - SourcePhoto
-
-struct SourcePhoto {
-    var image: UIImage
-    var originalSize: CGSize
-    var texture: MTLTexture?
-
-    init(image: UIImage) {
-        self.image = image
-        self.originalSize = image.size
-        self.texture = nil
-    }
-}
 
 // MARK: - EditSession
 
 @MainActor
 final class EditSession: ObservableObject {
-    @Published var sourcePhoto: SourcePhoto?
     @Published var shaderStack: [ShaderLayer] = []
     @Published var selectedLayerIndex: Int = 0
     @Published var exportSpec: ExportSpec = ExportSpec()
@@ -34,6 +20,12 @@ final class EditSession: ObservableObject {
         let layer = ShaderLayer(effectType: effect)
         shaderStack.append(layer)
         selectedLayerIndex = shaderStack.count - 1
+    }
+
+    func addImageLayer(_ image: UIImage) {
+        let layer = ShaderLayer(image: image)
+        shaderStack.insert(layer, at: 0)
+        selectedLayerIndex = 0
     }
 
     func removeLayer(at index: Int) {

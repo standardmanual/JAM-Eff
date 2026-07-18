@@ -1,12 +1,13 @@
 import SwiftUI
 import MetalKit
+import PhotosUI
 
 // MARK: - EditorLayout Constants
 
 enum EditorLayout {
-    static let navBarHeight: CGFloat    = 44
+    static let navBarHeight: CGFloat      = 44
     static let previewZoneHeight: CGFloat = 320
-    static let layerTrayHeight: CGFloat = 96
+    static let layerTrayHeight: CGFloat   = 96
 }
 
 // MARK: - EditorView (4-Zone Layout)
@@ -18,6 +19,10 @@ struct EditorView: View {
     @State private var renderer: Renderer?
     @State private var showAddShaderSheet: Bool = false
     @State private var isSaving: Bool = false
+    @State private var photoPickerItem: PhotosPickerItem? = nil
+
+    @StateObject private var videoExporter = VideoExporter()
+    @State private var exportTask: Task<Void, Never>? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,9 +55,26 @@ struct EditorView: View {
         }
         .task {
             await setupRenderer()
-            // Add default layer if stack is empty
-            if session.shaderStack.isEmpty {
-                session.addLayer(.meshGradient)
+        }
+        .overlay {
+            if videoExporter.isExporting {
+                ExportProgressView(
+                    progress: videoExporter.progress,
+                    onCancel: {
+                        exportTask?.cancel()
+                        videoExporter.isExporting = false
+                    }
+                )
+            }
+        }
+        .onChange(of: photoPickerItem) { _, newItem in
+            Task {
+                guard let newItem else { return }
+                if let data = try? await newItem.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    session.addImageLayer(image)
+                }
+                photoPickerItem = nil
             }
         }
     }
@@ -82,6 +104,25 @@ struct EditorView: View {
 
             Spacer()
 
+            PhotosPicker(selection: $photoPickerItem, matching: .images) {
+                Image(systemName: "photo.badge.plus")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(Color.secondary)
+            }
+            .buttonStyle(.plain)
+            .frame(minWidth: 44, minHeight: 44)
+
+            Button {
+                startVideoExport()
+            } label: {
+                Image(systemName: "video.badge.plus")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(Color.blue)
+            }
+            .buttonStyle(.plain)
+            .frame(minWidth: 44, minHeight: 44)
+            .disabled(videoExporter.isExporting || session.shaderStack.isEmpty)
+
             Button {
                 Task { await saveImage() }
             } label: {
@@ -106,13 +147,8 @@ struct EditorView: View {
     // MARK: - Setup
 
     private func setupRenderer() async {
-        // MTKView must be created for Renderer.init — we use a temporary view
         let mtkView = MTKView()
         if let r = Renderer(mtkView: mtkView) {
-            // Load source texture if available
-            if let photo = session.sourcePhoto {
-                r.sourceTexture = TextureUtils.texture(from: photo.image, device: r.device)
-            }
             renderer = r
         }
     }
@@ -124,14 +160,30 @@ struct EditorView: View {
         isSaving = true
         do {
             try await ImageExporter.exportToPhotoLibrary(renderer: renderer, exportSpec: session.exportSpec)
-            let haptic = UINotificationFeedbackGenerator()
-            haptic.notificationOccurred(.success)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
             session.showToastMessage("카메라롤에 저장됨")
         } catch {
-            let haptic = UINotificationFeedbackGenerator()
-            haptic.notificationOccurred(.error)
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
             session.showToastMessage("저장 실패: \(error.localizedDescription)")
         }
         isSaving = false
+    }
+
+    // MARK: - Video Export
+
+    private func startVideoExport() {
+        guard let device = MTLCreateSystemDefaultDevice() else { return }
+        exportTask = Task {
+            do {
+                try await videoExporter.export(
+                    session: session,
+                    device: device,
+                    pipeline: ShaderPipeline.shared
+                )
+                session.showToastMessage("동영상이 저장됐어요!")
+            } catch {
+                session.showToastMessage("저장 실패: \(error.localizedDescription)")
+            }
+        }
     }
 }

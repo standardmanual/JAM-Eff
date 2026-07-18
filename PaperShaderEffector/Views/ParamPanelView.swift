@@ -33,6 +33,33 @@ struct ParamPanelView: View {
 
     @ViewBuilder
     private func paramContent(layerBinding: Binding<ShaderLayer>, layer: ShaderLayer) -> some View {
+        if layer.isImageLayer {
+            imageLayerContent
+        } else {
+            shaderParamContent(layerBinding: layerBinding, layer: layer)
+        }
+    }
+
+    @ViewBuilder
+    private var imageLayerContent: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "photo.on.rectangle")
+                .font(.system(size: 32))
+                .foregroundStyle(Color.secondary)
+            Text("사진 레이어")
+                .font(.system(size: 15, weight: .medium))
+            Text("프리뷰에서 핀치/드래그로 크기와 위치를 조정할 수 있어요")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 40)
+    }
+
+    @ViewBuilder
+    private func shaderParamContent(layerBinding: Binding<ShaderLayer>, layer: ShaderLayer) -> some View {
         VStack(alignment: .leading, spacing: 0) {
 
             // MARK: 색상 섹션
@@ -75,7 +102,7 @@ struct ParamPanelView: View {
             .buttonStyle(.plain)
 
             if layoutExpanded {
-                ForEach(layer.effectType.layoutParamKeys, id: \.self) { key in
+                ForEach(layer.effectType?.layoutParamKeys ?? [], id: \.self) { key in
                     adjustRow(key: key, layerBinding: layerBinding, layer: layerBinding.wrappedValue)
                     Divider().padding(.horizontal, 16)
                 }
@@ -97,7 +124,7 @@ struct ParamPanelView: View {
     }
 
     private func adjustKeys(layer: ShaderLayer) -> [String] {
-        let layoutKeys = Set(layer.effectType.layoutParamKeys)
+        let layoutKeys = Set(layer.effectType?.layoutParamKeys ?? [])
         return layer.params.keys.filter { key in
             if layoutKeys.contains(key) { return false }
             switch layer.params[key] {

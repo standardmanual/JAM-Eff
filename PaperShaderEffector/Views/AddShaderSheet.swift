@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 // MARK: - AddShaderSheet (Bottom Sheet — 3열 그리드)
 
@@ -6,6 +7,7 @@ struct AddShaderSheet: View {
     @EnvironmentObject var session: EditSession
     @Binding var isPresented: Bool
     @State private var searchText: String = ""
+    @State private var photoItem: PhotosPickerItem? = nil
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
 
@@ -21,6 +23,15 @@ struct AddShaderSheet: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
+                // Photo / PNG layer option
+                photoSection
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 4)
+
+                Divider()
+                    .padding(.vertical, 4)
+
                 // Search Bar
                 HStack {
                     Image(systemName: "magnifyingglass")
@@ -51,7 +62,7 @@ struct AddShaderSheet: View {
                     .padding(.bottom, 20)
                 }
             }
-            .navigationTitle("쉐이더 추가")
+            .navigationTitle("레이어 추가")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -62,6 +73,50 @@ struct AddShaderSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .onChange(of: photoItem) { _, newItem in
+            Task {
+                guard let newItem else { return }
+                if let data = try? await newItem.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    session.addImageLayer(image)
+                    let haptic = UIImpactFeedbackGenerator(style: .medium)
+                    haptic.impactOccurred()
+                    isPresented = false
+                }
+            }
+        }
+    }
+
+    // MARK: - Photo Section
+
+    private var photoSection: some View {
+        PhotosPicker(selection: $photoItem, matching: .images) {
+            HStack(spacing: 12) {
+                Image(systemName: "photo.badge.plus")
+                    .font(.system(size: 22))
+                    .foregroundStyle(Color.blue)
+                    .frame(width: 44, height: 44)
+                    .background(Color.blue.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("사진/PNG 추가")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(Color.primary)
+                    Text("새 이미지 레이어로 스택에 추가")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.secondary)
+            }
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
     }
 }
 
