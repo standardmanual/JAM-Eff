@@ -10,8 +10,9 @@ struct AddShaderSheet: View {
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
 
     var filteredEffects: [ShaderEffect] {
-        if searchText.isEmpty { return ShaderEffect.allCases }
-        return ShaderEffect.allCases.filter {
+        let implemented = ShaderEffect.allCases.filter { $0.isImplemented }
+        if searchText.isEmpty { return implemented }
+        return implemented.filter {
             $0.rawValue.localizedCaseInsensitiveContains(searchText) ||
             $0.category.rawValue.localizedCaseInsensitiveContains(searchText)
         }
@@ -73,21 +74,7 @@ struct ShaderGridCell: View {
     var body: some View {
         Button(action: onSelect) {
             VStack(spacing: 4) {
-                // Thumbnail placeholder
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(thumbnailGradient)
-                    .overlay(
-                        effect.isImplemented
-                            ? AnyView(EmptyView())
-                            : AnyView(
-                                Text("준비 중")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(.white.opacity(0.8))
-                                    .padding(4)
-                                    .background(Color.black.opacity(0.4))
-                                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                            )
-                    )
+                ShaderThumbnailView(effect: effect, cornerRadius: 8)
                     .aspectRatio(1, contentMode: .fit)
 
                 Text(effect.rawValue)
@@ -102,20 +89,5 @@ struct ShaderGridCell: View {
             }
         }
         .buttonStyle(.plain)
-        .opacity(effect.isImplemented ? 1.0 : 0.6)
-    }
-
-    private var thumbnailGradient: LinearGradient {
-        switch effect.category {
-        case .imageFilter:
-            return LinearGradient(colors: [.orange.opacity(0.7), .pink.opacity(0.7)],
-                                  startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .effect:
-            return LinearGradient(colors: [.blue.opacity(0.7), .purple.opacity(0.7)],
-                                  startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .logo:
-            return LinearGradient(colors: [.teal.opacity(0.7), .green.opacity(0.7)],
-                                  startPoint: .topLeading, endPoint: .bottomTrailing)
-        }
     }
 }

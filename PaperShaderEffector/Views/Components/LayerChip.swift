@@ -12,8 +12,7 @@ struct LayerChip: View {
         VStack(spacing: 0) {
             // Thumbnail area (top 4/5 = 64pt)
             ZStack(alignment: .topTrailing) {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(thumbnailGradient)
+                ShaderThumbnailView(effect: layer.effectType, cornerRadius: 8)
                     .frame(height: 64)
 
                 // Enable/disable badge
@@ -46,20 +45,6 @@ struct LayerChip: View {
                 .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
         )
         .onTapGesture(perform: onTap)
-    }
-
-    private var thumbnailGradient: LinearGradient {
-        // Placeholder gradient based on effect type
-        let colors = thumbnailColors
-        return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
-
-    private var thumbnailColors: [Color] {
-        switch layer.effectType.category {
-        case .imageFilter: return [Color.orange.opacity(0.6), Color.pink.opacity(0.6)]
-        case .effect:      return [Color.blue.opacity(0.6),   Color.purple.opacity(0.6)]
-        case .logo:        return [Color.teal.opacity(0.6),   Color.green.opacity(0.6)]
-        }
     }
 }
 
