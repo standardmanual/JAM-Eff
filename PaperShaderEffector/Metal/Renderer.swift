@@ -119,21 +119,30 @@ final class Renderer: NSObject, MTKViewDelegate {
                 )
 
             case .shader:
-                // Render shader to scratch, then composite with blend mode + opacity
-                ShaderPipeline.shared.encode(
-                    layer: layer, inputTexture: inputTex, outputTexture: scratch,
-                    commandBuffer: commandBuffer, time: time
-                )
-                let canvasAspect = Float(canvasPixelSize.width / canvasPixelSize.height)
-                let blendParams = OverlayUniforms(
-                    scale: 1.0, rotation: 0, offsetX: 0, offsetY: 0,
-                    opacity: layer.opacity, canvasAspect: canvasAspect,
-                    blendMode: layer.blendMode.rawValue
-                )
-                ShaderPipeline.shared.encodeOverlay(
-                    background: inputTex, overlay: scratch,
-                    outputTexture: outputTex, commandBuffer: commandBuffer, params: blendParams
-                )
+                let needsBlend = layer.blendMode != .normal || layer.opacity < 0.9999
+                if needsBlend {
+                    // Indirect: render to scratch, composite with blend + opacity
+                    ShaderPipeline.shared.encode(
+                        layer: layer, inputTexture: inputTex, outputTexture: scratch,
+                        commandBuffer: commandBuffer, time: time
+                    )
+                    let canvasAspect = Float(canvasPixelSize.width / canvasPixelSize.height)
+                    let blendParams = OverlayUniforms(
+                        scale: 1.0, rotation: 0, offsetX: 0, offsetY: 0,
+                        opacity: layer.opacity, canvasAspect: canvasAspect,
+                        blendMode: layer.blendMode.rawValue
+                    )
+                    ShaderPipeline.shared.encodeOverlay(
+                        background: inputTex, overlay: scratch,
+                        outputTexture: outputTex, commandBuffer: commandBuffer, params: blendParams
+                    )
+                } else {
+                    // Direct: no blending, render straight to outputTex (original behavior)
+                    ShaderPipeline.shared.encode(
+                        layer: layer, inputTexture: inputTex, outputTexture: outputTex,
+                        commandBuffer: commandBuffer, time: time
+                    )
+                }
             }
             swap(&inputTex, &outputTex)
         }
@@ -223,19 +232,27 @@ final class Renderer: NSObject, MTKViewDelegate {
                 )
 
             case .shader:
-                ShaderPipeline.shared.encode(
-                    layer: layer, inputTexture: inputTex, outputTexture: scratchTex,
-                    commandBuffer: commandBuffer, time: time
-                )
-                let blendParams = OverlayUniforms(
-                    scale: 1.0, rotation: 0, offsetX: 0, offsetY: 0,
-                    opacity: layer.opacity, canvasAspect: canvasAspect,
-                    blendMode: layer.blendMode.rawValue
-                )
-                ShaderPipeline.shared.encodeOverlay(
-                    background: inputTex, overlay: scratchTex,
-                    outputTexture: altTex, commandBuffer: commandBuffer, params: blendParams
-                )
+                let needsBlend = layer.blendMode != .normal || layer.opacity < 0.9999
+                if needsBlend {
+                    ShaderPipeline.shared.encode(
+                        layer: layer, inputTexture: inputTex, outputTexture: scratchTex,
+                        commandBuffer: commandBuffer, time: time
+                    )
+                    let blendParams = OverlayUniforms(
+                        scale: 1.0, rotation: 0, offsetX: 0, offsetY: 0,
+                        opacity: layer.opacity, canvasAspect: canvasAspect,
+                        blendMode: layer.blendMode.rawValue
+                    )
+                    ShaderPipeline.shared.encodeOverlay(
+                        background: inputTex, overlay: scratchTex,
+                        outputTexture: altTex, commandBuffer: commandBuffer, params: blendParams
+                    )
+                } else {
+                    ShaderPipeline.shared.encode(
+                        layer: layer, inputTexture: inputTex, outputTexture: altTex,
+                        commandBuffer: commandBuffer, time: time
+                    )
+                }
             }
             swap(&inputTex, &altTex)
         }

@@ -268,19 +268,27 @@ final class VideoExporter: ObservableObject {
                 )
 
             case .shader:
-                pipeline.encode(
-                    layer: layer, inputTexture: inputTex, outputTexture: scratchTexture,
-                    commandBuffer: commandBuffer, time: time
-                )
-                let blendParams = OverlayUniforms(
-                    scale: 1.0, rotation: 0, offsetX: 0, offsetY: 0,
-                    opacity: layer.opacity, canvasAspect: canvasAspect,
-                    blendMode: layer.blendMode.rawValue
-                )
-                pipeline.encodeOverlay(
-                    background: inputTex, overlay: scratchTexture,
-                    outputTexture: altTex, commandBuffer: commandBuffer, params: blendParams
-                )
+                let needsBlend = layer.blendMode != .normal || layer.opacity < 0.9999
+                if needsBlend {
+                    pipeline.encode(
+                        layer: layer, inputTexture: inputTex, outputTexture: scratchTexture,
+                        commandBuffer: commandBuffer, time: time
+                    )
+                    let blendParams = OverlayUniforms(
+                        scale: 1.0, rotation: 0, offsetX: 0, offsetY: 0,
+                        opacity: layer.opacity, canvasAspect: canvasAspect,
+                        blendMode: layer.blendMode.rawValue
+                    )
+                    pipeline.encodeOverlay(
+                        background: inputTex, overlay: scratchTexture,
+                        outputTexture: altTex, commandBuffer: commandBuffer, params: blendParams
+                    )
+                } else {
+                    pipeline.encode(
+                        layer: layer, inputTexture: inputTex, outputTexture: altTex,
+                        commandBuffer: commandBuffer, time: time
+                    )
+                }
             }
             swap(&inputTex, &altTex)
         }
