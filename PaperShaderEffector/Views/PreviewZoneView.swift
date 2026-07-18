@@ -44,15 +44,15 @@ struct MetalPreviewView: UIViewRepresentable {
 
 // MARK: - GestureOverlayView
 //
+// isEditingMode=true일 때만 제스처를 활성화합니다.
 // onChanged로 renderer에 직접 기록 → CADisplayLink가 다음 프레임에서 읽음 (60fps).
-// SwiftUI를 거치지 않으므로 뚝뚝 끊기지 않는다.
 
 struct GestureOverlayView: View {
     let renderer: Renderer
     let viewSize: CGSize
+    var isEditingMode: Bool
     @EnvironmentObject var session: EditSession
 
-    // 각 제스처가 시작될 때 캡처한 기준값 (제스처 도중 SwiftUI 재렌더 없이 유지)
     @State private var pinchBaseScale: Float = 1.0
     @State private var rotBaseAngle: Float   = 0.0
     @State private var dragBaseX: Float      = 0.0
@@ -66,7 +66,15 @@ struct GestureOverlayView: View {
     }
 
     var body: some View {
-        // 핀치 → 균일 스케일 (aspect ratio 유지)
+        if isEditingMode {
+            gestureLayer
+        } else {
+            Color.clear  // 터치 불통 — 제스처 비활성
+        }
+    }
+
+    @ViewBuilder
+    private var gestureLayer: some View {
         let magnifyGesture = MagnificationGesture()
             .onChanged { value in
                 guard isTargetingImageLayer else { return }
@@ -83,7 +91,6 @@ struct GestureOverlayView: View {
                 syncTransformToSession()
             }
 
-        // 두 손가락 회전
         let rotateGesture = RotationGesture()
             .onChanged { value in
                 guard isTargetingImageLayer else { return }
@@ -100,7 +107,6 @@ struct GestureOverlayView: View {
                 syncTransformToSession()
             }
 
-        // 드래그 → 오프셋 이동
         let dragGesture = DragGesture(minimumDistance: 1)
             .onChanged { value in
                 guard isTargetingImageLayer else { return }
@@ -138,27 +144,28 @@ struct GestureOverlayView: View {
     }
 }
 
-// MARK: - PreviewZoneView (Zone 2, 320pt fixed)
+// MARK: - PreviewZoneView (Zone 2)
 
 struct PreviewZoneView: View {
     @EnvironmentObject var session: EditSession
     let renderer: Renderer
+    var isEditingMode: Bool = false
 
-    private let zoneHeight: CGFloat = 320
+    private let normalHeight: CGFloat = 320
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            Color.black.ignoresSafeArea(edges: [])
+            Color.black
 
             previewBox
 
-            // Ratio toggle pill (bottom-right)
+            // Ratio toggle — 항상 표시
             RatioToggle(ratio: $session.exportSpec.ratio)
                 .padding(.bottom, 12)
                 .padding(.trailing, 12)
 
-            // Reset transform button (bottom-left) — only shown for image layers
-            if session.selectedLayer?.isImageLayer == true {
+            // Reset transform — 편집 모드에서 이미지 레이어 선택 시
+            if isEditingMode && session.selectedLayer?.isImageLayer == true {
                 Button {
                     renderer.selectedLayerTransform = .identity
                     syncTransformToSession()
@@ -175,16 +182,31 @@ struct PreviewZoneView: View {
                 .padding(.leading, 12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
             }
+
+            // 편집 모드 힌트 (이미지 레이어 선택 시 상단)
+            if isEditingMode && session.selectedLayer?.isImageLayer == true {
+                Text("핀치·드래그로 조정")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.35))
+                    .clipShape(Capsule())
+                    .padding(.top, 12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
         }
-        .frame(height: zoneHeight)
+        .frame(maxWidth: .infinity)
+        .frame(height: isEditingMode ? nil : normalHeight, alignment: .center)
+        .frame(maxHeight: isEditingMode ? .infinity : normalHeight)
     }
 
     @ViewBuilder
     private var previewBox: some View {
         GeometryReader { geo in
-            let ratio  = session.exportSpec.ratio.aspectRatio
-            let maxW   = geo.size.width
-            let maxH   = zoneHeight
+            let ratio   = session.exportSpec.ratio.aspectRatio
+            let maxW    = geo.size.width
+            let maxH    = geo.size.height
             let (boxW, boxH): (CGFloat, CGFloat) = {
                 let wByH = maxH * ratio
                 return wByH <= maxW ? (wByH, maxH) : (maxW, maxW / ratio)
@@ -192,10 +214,14 @@ struct PreviewZoneView: View {
 
             MetalPreviewView(renderer: renderer)
                 .frame(width: boxW, height: boxH)
-                .position(x: geo.size.width / 2, y: zoneHeight / 2)
+                .position(x: geo.size.width / 2, y: geo.size.height / 2)
                 .overlay(
-                    GestureOverlayView(renderer: renderer, viewSize: CGSize(width: boxW, height: boxH))
-                        .environmentObject(session)
+                    GestureOverlayView(
+                        renderer: renderer,
+                        viewSize: CGSize(width: boxW, height: boxH),
+                        isEditingMode: isEditingMode
+                    )
+                    .environmentObject(session)
                 )
         }
     }
