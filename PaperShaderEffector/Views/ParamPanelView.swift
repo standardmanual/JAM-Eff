@@ -33,11 +33,81 @@ struct ParamPanelView: View {
 
     @ViewBuilder
     private func paramContent(layerBinding: Binding<ShaderLayer>, layer: ShaderLayer) -> some View {
-        if layer.isImageLayer {
-            imageLayerContent
-        } else {
-            shaderParamContent(layerBinding: layerBinding, layer: layer)
+        VStack(alignment: .leading, spacing: 0) {
+            // Opacity + blend mode controls (all layer types)
+            SectionHeader(title: "레이어")
+            opacityRow(layerBinding: layerBinding)
+            Divider().padding(.horizontal, 16)
+            blendModeRow(layerBinding: layerBinding)
+            Divider().padding(.horizontal, 16)
+
+            if layer.isImageLayer {
+                imageLayerContent
+            } else {
+                shaderParamContent(layerBinding: layerBinding, layer: layer)
+            }
         }
+    }
+
+    @ViewBuilder
+    private func opacityRow(layerBinding: Binding<ShaderLayer>) -> some View {
+        HStack(spacing: 8) {
+            Text("투명도")
+                .font(.system(size: 14))
+                .frame(width: 64, alignment: .leading)
+            Slider(
+                value: Binding(
+                    get: { Double(layerBinding.wrappedValue.opacity) },
+                    set: { layerBinding.wrappedValue.opacity = Float($0) }
+                ),
+                in: 0...1
+            )
+            Text("\(Int(layerBinding.wrappedValue.opacity * 100))%")
+                .font(.system(size: 13).monospacedDigit())
+                .foregroundStyle(Color.secondary)
+                .frame(width: 36, alignment: .trailing)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 44)
+    }
+
+    @ViewBuilder
+    private func blendModeRow(layerBinding: Binding<ShaderLayer>) -> some View {
+        HStack {
+            Text("합성 모드")
+                .font(.system(size: 14))
+                .frame(width: 64, alignment: .leading)
+            Spacer()
+            Menu {
+                ForEach(LayerBlendMode.allCases, id: \.self) { mode in
+                    Button {
+                        layerBinding.wrappedValue.blendMode = mode
+                    } label: {
+                        HStack {
+                            Text(mode.displayName)
+                            if layerBinding.wrappedValue.blendMode == mode {
+                                Spacer()
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(layerBinding.wrappedValue.blendMode.displayName)
+                        .font(.system(size: 14))
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 10))
+                }
+                .foregroundStyle(Color.primary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color(.systemFill))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 44)
     }
 
     @ViewBuilder

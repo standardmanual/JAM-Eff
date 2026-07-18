@@ -290,7 +290,7 @@ struct TransformUniforms {
 }
 
 // MARK: - Overlay Uniforms (must match Overlay.metal OverlayUniforms)
-// 32 bytes: 8 × float
+// 32 bytes: 6×float + int32 + float
 
 struct OverlayUniforms {
     var scale:        Float    // 오버레이 크기 배율 (1.0 = 캔버스 꽉 채움)
@@ -299,8 +299,8 @@ struct OverlayUniforms {
     var offsetY:      Float    // 오버레이 위치 Y (UV 단위, 0=중앙)
     var opacity:      Float
     var canvasAspect: Float    // canvasWidth / canvasHeight (e.g. 0.5625 for 9:16)
+    var blendMode:    Int32 = 0  // LayerBlendMode raw value
     var _pad0: Float = 0
-    var _pad1: Float = 0
 }
 
 // MARK: - Vertex Data

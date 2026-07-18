@@ -28,8 +28,9 @@ final class Renderer: NSObject, MTKViewDelegate {
     var selectedLayerID: UUID? = nil
     var selectedLayerTransform: PhotoTransform = .identity
 
-    private var pingTexture: MTLTexture?
-    private var pongTexture: MTLTexture?
+    private var pingTexture:    MTLTexture?
+    private var pongTexture:    MTLTexture?
+    private var scratchTexture: MTLTexture?
     private var currentDrawableSize: CGSize = .zero
 
     weak var mtkView: MTKView?
@@ -89,7 +90,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         let w = Int(view.drawableSize.width)
         let h = Int(view.drawableSize.height)
         ensureTextures(width: w, height: h)
-        guard let ping = pingTexture, let pong = pongTexture else {
+        guard let ping = pingTexture, let pong = pongTexture, let scratch = scratchTexture else {
             commandBuffer.commit(); return
         }
 
@@ -109,7 +110,8 @@ final class Renderer: NSObject, MTKViewDelegate {
                 let params = OverlayUniforms(
                     scale: transform.scale, rotation: transform.rotation,
                     offsetX: transform.offsetX, offsetY: transform.offsetY,
-                    opacity: layer.opacity, canvasAspect: canvasAspect
+                    opacity: layer.opacity, canvasAspect: canvasAspect,
+                    blendMode: layer.blendMode.rawValue
                 )
                 ShaderPipeline.shared.encodeOverlay(
                     background: inputTex, overlay: imageTex,
@@ -117,9 +119,20 @@ final class Renderer: NSObject, MTKViewDelegate {
                 )
 
             case .shader:
+                // Render shader to scratch, then composite with blend mode + opacity
                 ShaderPipeline.shared.encode(
-                    layer: layer, inputTexture: inputTex, outputTexture: outputTex,
+                    layer: layer, inputTexture: inputTex, outputTexture: scratch,
                     commandBuffer: commandBuffer, time: time
+                )
+                let canvasAspect = Float(canvasPixelSize.width / canvasPixelSize.height)
+                let blendParams = OverlayUniforms(
+                    scale: 1.0, rotation: 0, offsetX: 0, offsetY: 0,
+                    opacity: layer.opacity, canvasAspect: canvasAspect,
+                    blendMode: layer.blendMode.rawValue
+                )
+                ShaderPipeline.shared.encodeOverlay(
+                    background: inputTex, overlay: scratch,
+                    outputTexture: outputTex, commandBuffer: commandBuffer, params: blendParams
                 )
             }
             swap(&inputTex, &outputTex)
@@ -151,8 +164,9 @@ final class Renderer: NSObject, MTKViewDelegate {
         let size = CGSize(width: width, height: height)
         guard size != currentDrawableSize else { return }
         currentDrawableSize = size
-        pingTexture = TextureUtils.makeRenderTarget(width: width, height: height, device: device)
-        pongTexture = TextureUtils.makeRenderTarget(width: width, height: height, device: device)
+        pingTexture    = TextureUtils.makeRenderTarget(width: width, height: height, device: device)
+        pongTexture    = TextureUtils.makeRenderTarget(width: width, height: height, device: device)
+        scratchTexture = TextureUtils.makeRenderTarget(width: width, height: height, device: device)
     }
 
     private func clearTexture(_ texture: MTLTexture, commandBuffer: MTLCommandBuffer) {
@@ -174,18 +188,19 @@ final class Renderer: NSObject, MTKViewDelegate {
             let commandBuffer = commandQueue.makeCommandBuffer()
         else { return nil }
 
-        let pingTex = TextureUtils.makeRenderTarget(width: w, height: h, device: device)!
-        let pongTex = TextureUtils.makeRenderTarget(width: w, height: h, device: device)!
+        let pingTex    = TextureUtils.makeRenderTarget(width: w, height: h, device: device)!
+        let pongTex    = TextureUtils.makeRenderTarget(width: w, height: h, device: device)!
+        let scratchTex = TextureUtils.makeRenderTarget(width: w, height: h, device: device)!
         clearTexture(pingTex, commandBuffer: commandBuffer)
 
         let ratioKey = "\(w)x\(h)"
         var inputTex: MTLTexture = pingTex
         var altTex: MTLTexture   = pongTex
+        let canvasAspect = Float(w) / Float(h)
 
         for layer in shaderStack where layer.isEnabled {
             switch layer.kind {
             case .image(let img):
-                // Use cached texture or create at export resolution
                 let imageTex: MTLTexture
                 if let (cachedKey, cachedTex) = imageTextureCache[layer.id], cachedKey == ratioKey {
                     imageTex = cachedTex
@@ -196,11 +211,11 @@ final class Renderer: NSObject, MTKViewDelegate {
                     continue
                 }
                 let transform = (layer.id == selectedLayerID) ? selectedLayerTransform : layer.imageTransform
-                let canvasAspect = Float(canvasPixelSize.width / canvasPixelSize.height)
                 let params = OverlayUniforms(
                     scale: transform.scale, rotation: transform.rotation,
                     offsetX: transform.offsetX, offsetY: transform.offsetY,
-                    opacity: layer.opacity, canvasAspect: canvasAspect
+                    opacity: layer.opacity, canvasAspect: canvasAspect,
+                    blendMode: layer.blendMode.rawValue
                 )
                 ShaderPipeline.shared.encodeOverlay(
                     background: inputTex, overlay: imageTex,
@@ -209,8 +224,17 @@ final class Renderer: NSObject, MTKViewDelegate {
 
             case .shader:
                 ShaderPipeline.shared.encode(
-                    layer: layer, inputTexture: inputTex, outputTexture: altTex,
+                    layer: layer, inputTexture: inputTex, outputTexture: scratchTex,
                     commandBuffer: commandBuffer, time: time
+                )
+                let blendParams = OverlayUniforms(
+                    scale: 1.0, rotation: 0, offsetX: 0, offsetY: 0,
+                    opacity: layer.opacity, canvasAspect: canvasAspect,
+                    blendMode: layer.blendMode.rawValue
+                )
+                ShaderPipeline.shared.encodeOverlay(
+                    background: inputTex, overlay: scratchTex,
+                    outputTexture: altTex, commandBuffer: commandBuffer, params: blendParams
                 )
             }
             swap(&inputTex, &altTex)

@@ -126,9 +126,10 @@ final class VideoExporter: ObservableObject {
             throw ExportError.metalSetupFailed
         }
         guard
-            let pingTexture   = TextureUtils.makeRenderTarget(width: width, height: height, device: device),
-            let pongTexture   = TextureUtils.makeRenderTarget(width: width, height: height, device: device),
-            let outputTexture = TextureUtils.makeRenderTarget(width: width, height: height, device: device)
+            let pingTexture    = TextureUtils.makeRenderTarget(width: width, height: height, device: device),
+            let pongTexture    = TextureUtils.makeRenderTarget(width: width, height: height, device: device),
+            let scratchTexture = TextureUtils.makeRenderTarget(width: width, height: height, device: device),
+            let outputTexture  = TextureUtils.makeRenderTarget(width: width, height: height, device: device)
         else {
             throw ExportError.metalSetupFailed
         }
@@ -185,6 +186,7 @@ final class VideoExporter: ObservableObject {
                 commandQueue: commandQueue,
                 pingTexture: pingTexture,
                 pongTexture: pongTexture,
+                scratchTexture: scratchTexture,
                 outputTexture: outputTexture,
                 time: time
             )
@@ -231,6 +233,7 @@ final class VideoExporter: ObservableObject {
         commandQueue: MTLCommandQueue,
         pingTexture: MTLTexture,
         pongTexture: MTLTexture,
+        scratchTexture: MTLTexture,
         outputTexture: MTLTexture,
         time: Float
     ) {
@@ -246,17 +249,18 @@ final class VideoExporter: ObservableObject {
 
         var inputTex: MTLTexture = pingTexture
         var altTex: MTLTexture   = pongTexture
+        let canvasAspect = Float(inputs.width) / Float(inputs.height)
 
         for layer in inputs.layers {
             switch layer.kind {
             case .image:
                 guard let imageTex = inputs.imageTextures[layer.id] else { continue }
                 let t = layer.imageTransform
-                let canvasAspect = Float(inputs.width) / Float(inputs.height)
                 let params = OverlayUniforms(
                     scale: t.scale, rotation: t.rotation,
                     offsetX: t.offsetX, offsetY: t.offsetY,
-                    opacity: layer.opacity, canvasAspect: canvasAspect
+                    opacity: layer.opacity, canvasAspect: canvasAspect,
+                    blendMode: layer.blendMode.rawValue
                 )
                 pipeline.encodeOverlay(
                     background: inputTex, overlay: imageTex,
@@ -265,8 +269,17 @@ final class VideoExporter: ObservableObject {
 
             case .shader:
                 pipeline.encode(
-                    layer: layer, inputTexture: inputTex, outputTexture: altTex,
+                    layer: layer, inputTexture: inputTex, outputTexture: scratchTexture,
                     commandBuffer: commandBuffer, time: time
+                )
+                let blendParams = OverlayUniforms(
+                    scale: 1.0, rotation: 0, offsetX: 0, offsetY: 0,
+                    opacity: layer.opacity, canvasAspect: canvasAspect,
+                    blendMode: layer.blendMode.rawValue
+                )
+                pipeline.encodeOverlay(
+                    background: inputTex, overlay: scratchTexture,
+                    outputTexture: altTex, commandBuffer: commandBuffer, params: blendParams
                 )
             }
             swap(&inputTex, &altTex)

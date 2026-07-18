@@ -13,10 +13,66 @@ struct OverlayUniforms {
     float offsetX;       // 위치 오프셋 X (UV 단위, 0 = 중앙)
     float offsetY;       // 위치 오프셋 Y (UV 단위, 0 = 중앙)
     float opacity;       // 투명도 (0~1)
-    float canvasAspect;  // 캔버스 width/height (e.g. 0.5625 for 9:16)
-    float _pad0;
-    float _pad1;
+    float canvasAspect;  // 캔버스 width/height
+    int   blendMode;     // LayerBlendMode raw value (0=Normal, 1=Multiply, ...)
+    float _pad;
 };
+
+// Blend mode implementations (src = foreground/layer, dst = background)
+static float3 applyBlendMode(float3 dst, float3 src, int mode) {
+    if (mode == 1) {
+        // Multiply
+        return dst * src;
+    } else if (mode == 2) {
+        // Screen
+        return 1.0 - (1.0 - dst) * (1.0 - src);
+    } else if (mode == 3) {
+        // Overlay
+        float3 r;
+        r.r = dst.r < 0.5 ? 2.0*dst.r*src.r : 1.0 - 2.0*(1.0-dst.r)*(1.0-src.r);
+        r.g = dst.g < 0.5 ? 2.0*dst.g*src.g : 1.0 - 2.0*(1.0-dst.g)*(1.0-src.g);
+        r.b = dst.b < 0.5 ? 2.0*dst.b*src.b : 1.0 - 2.0*(1.0-dst.b)*(1.0-src.b);
+        return r;
+    } else if (mode == 4) {
+        // Soft Light (W3C formula)
+        float3 d;
+        d.r = dst.r < 0.25 ? ((16.0*dst.r - 12.0)*dst.r + 4.0)*dst.r : sqrt(dst.r);
+        d.g = dst.g < 0.25 ? ((16.0*dst.g - 12.0)*dst.g + 4.0)*dst.g : sqrt(dst.g);
+        d.b = dst.b < 0.25 ? ((16.0*dst.b - 12.0)*dst.b + 4.0)*dst.b : sqrt(dst.b);
+        float3 r;
+        r.r = src.r < 0.5 ? dst.r-(1.0-2.0*src.r)*dst.r*(1.0-dst.r) : dst.r+(2.0*src.r-1.0)*(d.r-dst.r);
+        r.g = src.g < 0.5 ? dst.g-(1.0-2.0*src.g)*dst.g*(1.0-dst.g) : dst.g+(2.0*src.g-1.0)*(d.g-dst.g);
+        r.b = src.b < 0.5 ? dst.b-(1.0-2.0*src.b)*dst.b*(1.0-dst.b) : dst.b+(2.0*src.b-1.0)*(d.b-dst.b);
+        return r;
+    } else if (mode == 5) {
+        // Hard Light
+        float3 r;
+        r.r = src.r < 0.5 ? 2.0*dst.r*src.r : 1.0 - 2.0*(1.0-dst.r)*(1.0-src.r);
+        r.g = src.g < 0.5 ? 2.0*dst.g*src.g : 1.0 - 2.0*(1.0-dst.g)*(1.0-src.g);
+        r.b = src.b < 0.5 ? 2.0*dst.b*src.b : 1.0 - 2.0*(1.0-dst.b)*(1.0-src.b);
+        return r;
+    } else if (mode == 6) {
+        // Color Dodge
+        return min(dst / max(1.0 - src, float3(0.001)), float3(1.0));
+    } else if (mode == 7) {
+        // Color Burn
+        return 1.0 - min((1.0 - dst) / max(src, float3(0.001)), float3(1.0));
+    } else if (mode == 8) {
+        // Darken
+        return min(dst, src);
+    } else if (mode == 9) {
+        // Lighten
+        return max(dst, src);
+    } else if (mode == 10) {
+        // Difference
+        return abs(dst - src);
+    } else if (mode == 11) {
+        // Exclusion
+        return dst + src - 2.0 * dst * src;
+    }
+    // Normal (mode == 0 or default)
+    return src;
+}
 
 fragment float4 overlayFragment(
     VertexOut                 in      [[stage_in]],
@@ -31,12 +87,9 @@ fragment float4 overlayFragment(
     float2 center = float2(0.5 + u.offsetX, 0.5 + u.offsetY);
     float2 delta  = in.texCoord - center;
 
-    // 회전 보정: UV 좌표를 물리 픽셀 비율(aspect-corrected)로 변환 후 회전
-    // aspect = W/H (e.g. 9/16 = 0.5625). X는 좁고 Y는 길므로 Y가 더 큰 물리 거리.
-    // 변환: physDelta = (delta.x * W, delta.y * H) = (delta.x, delta.y / aspect) * W
-    // 회전 후 역변환: (rotated.x / W, rotated.y / H) = (rotated.x, rotated.y * aspect)
+    // 회전 보정: aspect-corrected space에서 회전
     float aspect = max(u.canvasAspect, 0.001);
-    float2 phys  = float2(delta.x, delta.y / aspect);  // aspect-corrected space
+    float2 phys  = float2(delta.x, delta.y / aspect);
 
     float cosR = cos(-u.rotation);
     float sinR = sin(-u.rotation);
@@ -44,7 +97,6 @@ fragment float4 overlayFragment(
     rotated.x = cosR * phys.x - sinR * phys.y;
     rotated.y = sinR * phys.x + cosR * phys.y;
 
-    // 물리 공간에서 다시 UV 공간으로 역변환 후 스케일 적용
     float2 backUV = float2(rotated.x, rotated.y * aspect);
     float2 ovUV   = backUV / max(u.scale, 0.001) + float2(0.5);
 
@@ -54,8 +106,8 @@ fragment float4 overlayFragment(
         return float4(bg.rgb, 1.0);
     }
 
-    float4 ov    = ovTex.sample(s, ovUV);
-    float  alpha = ov.a * u.opacity;
-    float3 blended = mix(bg.rgb, ov.rgb, alpha);
-    return float4(blended, 1.0);
+    float4 ov     = ovTex.sample(s, ovUV);
+    float  alpha  = ov.a * u.opacity;
+    float3 blended = applyBlendMode(bg.rgb, ov.rgb, u.blendMode);
+    return float4(mix(bg.rgb, blended, alpha), 1.0);
 }
